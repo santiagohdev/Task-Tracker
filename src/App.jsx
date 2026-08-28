@@ -1,7 +1,9 @@
-const { useState, useEffect, useRef, useCallback } = React;
+import { useState, useEffect, useRef } from 'react';
  
 /* ── HELPERS ── */
-const genId = () => Math.random().toString(36).slice(2,10);
+const genId = () =>
+  // crypto.randomUUID no colisiona; Math.random con 8 caracteres, sí podía.
+  (crypto.randomUUID?.() ?? Math.random().toString(36).slice(2, 10));
 const fmtDate = (d) => new Date(d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
  
 const PRIO_LABELS = { high:'High', med:'Medium', low:'Low', none:'' };
@@ -78,15 +80,26 @@ function App() {
     e.preventDefault();
     setOverIdx(idx);
   };
-  const onDrop = (e, idx) => {
+  /* Se suelta sobre una posición de la lista que se está viendo, que puede
+     estar filtrada. Antes ese índice se usaba tal cual contra el arreglo
+     completo: con "Active" o "Done" puesto, la tarea aterrizaba en cualquier
+     lado. Ahora se traduce la posición visible a la posición real. */
+  const onDrop = (e, idx, listaVisible) => {
     e.preventDefault();
     if(dragId===null) return;
     setTasks(prev => {
       const arr = [...prev];
-      const fromIdx = arr.findIndex(t=>t.id===dragId);
-      if(fromIdx===-1) return prev;
-      const [item] = arr.splice(fromIdx,1);
-      arr.splice(idx,0,item);
+      const desde = arr.findIndex(t => t.id === dragId);
+      if(desde === -1) return prev;
+
+      const destino = listaVisible[idx];
+      let hasta = destino ? arr.findIndex(t => t.id === destino.id) : arr.length - 1;
+      if(hasta === -1) hasta = arr.length - 1;
+
+      const [item] = arr.splice(desde, 1);
+      // Al sacar el elemento, todo lo que estaba después corre un lugar.
+      if(desde < hasta) hasta -= 1;
+      arr.splice(hasta, 0, item);
       return arr;
     });
     setDragId(null);
@@ -156,6 +169,8 @@ function App() {
               key={p}
               className={`prio-btn${priority===p?' selected':''}`}
               onClick={()=>setPrio(p)}
+              aria-pressed={priority===p}
+              aria-label={`Priority: ${PRIO_LABELS[p]||'none'}`}
               title={PRIO_LABELS[p]||'No priority'}
             >{PRIO_ICONS[p]}</button>
           ))}
@@ -170,6 +185,7 @@ function App() {
             key={f}
             className={`filter-btn${filter===f?' active':''}`}
             onClick={()=>setFilter(f)}
+            aria-pressed={filter===f}
           >{f.charAt(0).toUpperCase()+f.slice(1)}</button>
         ))}
       </div>
@@ -210,20 +226,26 @@ function App() {
             draggable
             onDragStart={e=>onDragStart(e,task.id)}
             onDragOver={e=>onDragOver(e,idx)}
-            onDrop={e=>onDrop(e,idx)}
+            onDrop={e=>onDrop(e,idx,filtered)}
             onDragEnd={onDragEnd}
           >
             {/* drag handle */}
-            <span className="drag-handle">⠿</span>
+            <span className="drag-handle" aria-hidden="true">⠿</span>
  
             {/* checkbox */}
-            <div className="check-wrap" onClick={()=>toggleDone(task.id)}>
+            <button
+              type="button"
+              className="check-wrap"
+              onClick={()=>toggleDone(task.id)}
+              aria-pressed={task.done}
+              aria-label={`${task.done ? 'Mark as pending' : 'Mark as done'}: ${task.text}`}
+            >
               <div className={`check${task.done?' checked':''}`}>
                 <svg className="check-tick" viewBox="0 0 12 9" fill="none">
                   <path d="M1 4.5L4.5 8L11 1" stroke="#0E0E0F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
-            </div>
+            </button>
  
             {/* body */}
             <div className="task-body">
@@ -262,6 +284,7 @@ function App() {
                 <button
                   className="action-btn"
                   onClick={()=>startEdit(task)}
+                  aria-label={`Edit: ${task.text}`}
                   title="Edit"
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -273,6 +296,7 @@ function App() {
               <button
                 className="action-btn del"
                 onClick={()=>deleteTask(task.id)}
+                aria-label={`Delete: ${task.text}`}
                 title="Delete"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -290,4 +314,4 @@ function App() {
   );
 }
  
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+export default App;
